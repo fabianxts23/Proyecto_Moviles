@@ -21,7 +21,27 @@ class OportunidadRepository(private val db: AppDatabase) {
         return db.usuarioDao().login(correo.trim().lowercase(), password)
     }
 
+    /**
+     * Refleja en Room un usuario autenticado por el backend. Se busca por correo para conservar
+     * el id local (las oportunidades referencian ese id con clave foránea).
+     */
+    suspend fun sincronizarUsuario(remoto: UsuarioEntity): UsuarioEntity {
+        asegurarDatosIniciales()
+        val dao = db.usuarioDao()
+        val local = dao.porCorreo(remoto.correo)
+        return if (local == null) {
+            remoto.copy(id = dao.insertar(remoto.copy(id = 0)))
+        } else {
+            remoto.copy(id = local.id).also { dao.actualizar(it) }
+        }
+    }
+
     suspend fun ejecutivos(): List<UsuarioEntity> = db.usuarioDao().listarEjecutivos()
+
+    /** Todos los usuarios activos (para mostrar quién es el responsable de cada gestión). */
+    suspend fun usuarios(): List<UsuarioEntity> = db.usuarioDao().listarActivos()
+
+    suspend fun usuario(id: Long): UsuarioEntity? = db.usuarioDao().porId(id)
 
     // ----- Organizaciones y contactos -----
     fun organizaciones(): Flow<List<OrganizacionEntity>> = db.organizacionDao().observarTodas()
@@ -46,19 +66,53 @@ class OportunidadRepository(private val db: AppDatabase) {
     /** Cambio de estado respetando reglas de negocio (rol y transiciones). */
     suspend fun cambiarEstado(id: Long, nuevo: EstadoOportunidad, rol: Rol): ResultadoOp {
         val actual = db.oportunidadDao().porId(id) ?: return ResultadoOp.Error("No existe la oportunidad")
-        if (actual.estado.esFinal) return ResultadoOp.Error("La oportunidad ya está cerrada")
-        val permitidos = ReglasEstado.transicionesPermitidas(actual.estado, rol)
-        if (nuevo !in permitidos) {
-            return ResultadoOp.Error("Transición no permitida para el rol ${rol.name.lowercase()}")
+        // Regla de negocio: cerrada = sin cambios; finales = solo supervisor.
+        ReglasEstado.validar(actual.estado, nuevo, rol)?.let { return ResultadoOp.Error(it) }
+        val ahora = System.currentTimeMillis()
+        db.oportunidadDao().actualizar(actual.copy(
+            estado = nuevo,
+            // Al pasar a "Propuesta enviada" se registra la fecha para la alerta de respuesta
+            propuestaEnviada = actual.propuestaEnviada || nuevo == EstadoOportunidad.PROPUESTA_ENVIADA,
+            fechaPropuesta = if (nuevo == EstadoOportunidad.PROPUESTA_ENVIADA) ahora
+                else actual.fechaPropuesta,
+            fechaUltimaActualizacion = ahora))
+        return ResultadoOp.Ok
+    }
+
+    /** Asigna o reasigna el responsable. Solo supervisor y solo oportunidades activas. */
+    suspend fun asignarResponsable(id: Long, ejecutivoId: Long, rol: Rol): ResultadoOp {
+        if (rol != Rol.SUPERVISOR) {
+            return ResultadoOp.Error("Acción bloqueada: solo el supervisor puede asignar responsables")
         }
-        db.oportunidadDao().actualizar(actual.copy(estado = nuevo,
+        val actual = db.oportunidadDao().porId(id) ?: return ResultadoOp.Error("No existe la oportunidad")
+        if (actual.estado.esFinal) {
+            return ResultadoOp.Error("La oportunidad está cerrada y no admite reasignación")
+        }
+        val ejecutivo = db.usuarioDao().porId(ejecutivoId)
+        if (ejecutivo == null || ejecutivo.rol != Rol.EJECUTIVO || !ejecutivo.cuentaActiva) {
+            return ResultadoOp.Error("El ejecutivo seleccionado no está disponible")
+        }
+        if (actual.responsableId == ejecutivoId) {
+            return ResultadoOp.Error("${ejecutivo.nombre} ya es el responsable de esta oportunidad")
+        }
+        db.oportunidadDao().actualizar(actual.copy(responsableId = ejecutivoId,
             fechaUltimaActualizacion = System.currentTimeMillis()))
         return ResultadoOp.Ok
     }
 
-    suspend fun asignarResponsable(id: Long, ejecutivoId: Long): ResultadoOp {
-        val actual = db.oportunidadDao().porId(id) ?: return ResultadoOp.Error("No existe")
-        db.oportunidadDao().actualizar(actual.copy(responsableId = ejecutivoId,
+    /** Cambia la prioridad. Solo supervisor y solo oportunidades activas. */
+    suspend fun cambiarPrioridad(id: Long, nueva: Prioridad, rol: Rol): ResultadoOp {
+        if (rol != Rol.SUPERVISOR) {
+            return ResultadoOp.Error("Acción bloqueada: solo el supervisor puede cambiar la prioridad")
+        }
+        val actual = db.oportunidadDao().porId(id) ?: return ResultadoOp.Error("No existe la oportunidad")
+        if (actual.estado.esFinal) {
+            return ResultadoOp.Error("La oportunidad está cerrada y su prioridad no se puede modificar")
+        }
+        if (actual.prioridad == nueva) {
+            return ResultadoOp.Error("La oportunidad ya tiene prioridad ${nueva.etiqueta}")
+        }
+        db.oportunidadDao().actualizar(actual.copy(prioridad = nueva,
             fechaUltimaActualizacion = System.currentTimeMillis()))
         return ResultadoOp.Ok
     }

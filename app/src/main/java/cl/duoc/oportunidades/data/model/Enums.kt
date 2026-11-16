@@ -85,13 +85,30 @@ enum class FuenteInformacion(val etiqueta: String) {
     COMUNICACION_INTERNA("Comunicación interna")
 }
 
-/** Transiciones de estado permitidas según el rol (regla de negocio). */
+/**
+ * Transiciones de estado permitidas según el rol (regla de negocio):
+ *  - Una oportunidad cerrada (estado final) no admite más cambios de estado.
+ *  - Desde un estado activo se puede pasar a cualquier otro estado activo.
+ *  - Los estados finales (confirmada, descartada, realizada, cancelada)
+ *    solo los puede fijar el SUPERVISOR.
+ */
 object ReglasEstado {
+
     fun transicionesPermitidas(estado: EstadoOportunidad, rol: Rol): List<EstadoOportunidad> {
         if (estado.esFinal) return emptyList()
         return EstadoOportunidad.values().filter { destino ->
-            !destino.esFinal && destino != estado ||
-                    (rol == Rol.SUPERVISOR && destino.esFinal)
+            destino != estado && (!destino.esFinal || rol == Rol.SUPERVISOR)
         }
+    }
+
+    /** Retorna el motivo del rechazo si el cambio no está permitido, o null si es válido. */
+    fun validar(actual: EstadoOportunidad, nuevo: EstadoOportunidad, rol: Rol): String? = when {
+        actual.esFinal ->
+            "La oportunidad está cerrada (${actual.etiqueta}) y no admite más cambios de estado"
+        nuevo == actual ->
+            "La oportunidad ya se encuentra en el estado ${nuevo.etiqueta}"
+        nuevo.esFinal && rol != Rol.SUPERVISOR ->
+            "Los estados finales (confirmada, descartada, realizada o cancelada) solo los puede fijar el supervisor"
+        else -> null
     }
 }

@@ -26,7 +26,9 @@ object CalendarUtils {
         try {
             val intent = Intent(Intent.ACTION_INSERT)
                 .setData(CalendarContract.Events.CONTENT_URI)
+                .putExtra(CalendarContract.Events.TITLE, titulo)
                 .putExtra(CalendarContract.Events.EVENT_LOCATION, ubicacion)
+                .putExtra(CalendarContract.Events.DESCRIPTION, descripcion)
                 .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, inicioMillis)
                 .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, fin)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

@@ -15,8 +15,18 @@ interface UsuarioDao {
     @Query("SELECT * FROM usuarios WHERE rol = 0 ORDER BY nombre")
     suspend fun listarEjecutivos(): List<UsuarioEntity>
 
+    /** Todos los usuarios activos (sirve para mostrar el nombre del responsable). */
+    @Query("SELECT * FROM usuarios WHERE cuentaActiva = 1 ORDER BY nombre")
+    suspend fun listarActivos(): List<UsuarioEntity>
+
     @Query("SELECT COUNT(*) FROM usuarios")
     suspend fun contar(): Int
+
+    @Query("SELECT * FROM usuarios WHERE correo = :correo LIMIT 1")
+    suspend fun porCorreo(correo: String): UsuarioEntity?
+
+    @Update
+    suspend fun actualizar(u: UsuarioEntity)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertar(u: UsuarioEntity): Long
@@ -81,10 +91,14 @@ interface OportunidadDao {
               ORDER BY fechaDeteccion ASC""")
     fun observarSinContacto(): Flow<List<OportunidadEntity>>
 
-    /** Propuestas enviadas (PROPUESTA_ENVIADA = 3) sin respuesta hace más de N días. */
+    /**
+     * Propuestas enviadas (PROPUESTA_ENVIADA = 3) sin respuesta hace más de N días.
+     * Se cuenta desde la fecha de la propuesta (si no existe, desde la última actualización),
+     * así que cambiar prioridad o responsable no reinicia el plazo.
+     */
     @Query("""SELECT * FROM oportunidades
-              WHERE estado = 3 AND fechaUltimaActualizacion < :desde
-              ORDER BY fechaUltimaActualizacion ASC""")
+              WHERE estado = 3 AND COALESCE(fechaPropuesta, fechaUltimaActualizacion) < :desde
+              ORDER BY COALESCE(fechaPropuesta, fechaUltimaActualizacion) ASC""")
     fun observarPropuestasSinRespuesta(desde: Long): Flow<List<OportunidadEntity>>
 
     /** Oportunidades activas que no tienen ninguna acción de seguimiento registrada. */

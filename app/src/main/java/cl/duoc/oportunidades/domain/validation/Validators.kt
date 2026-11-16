@@ -20,18 +20,22 @@ object Validators {
 
     fun telefono(valor: String): String? {
         if (valor.isBlank()) return "El teléfono es obligatorio"
-        val regex = Regex("^\\+?56?\\s?9\\s?\\d{4}\\s?\\d{4}$")
+        // Celular chileno: 9 XXXX XXXX, con prefijo opcional +56 / 56
+        val regex = Regex("^(\\+?56\\s?)?9\\s?\\d{4}\\s?\\d{4}$")
         return if (!regex.matches(valor.trim()))
             "Formato inválido (ej: +56 9 5555 0101)" else null
     }
 
     fun fechaValida(valor: String): String? {
         if (valor.isBlank()) return "La fecha es obligatoria"
+        if (!Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(valor.trim())) {
+            return "Fecha inválida (formato yyyy-MM-dd)"
+        }
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
             isLenient = false
         }
         return try {
-            sdf.parse(valor) ?: return "Fecha inválida (formato yyyy-MM-dd)"
+            sdf.parse(valor.trim()) ?: return "Fecha inválida (formato yyyy-MM-dd)"
             null
         } catch (e: Exception) {
             "Fecha inválida (formato yyyy-MM-dd)"
@@ -46,13 +50,25 @@ object Validators {
 
     fun enteroNoNegativo(valor: String, campo: String): String? {
         if (valor.isBlank()) return "$campo es obligatorio"
-        val n = valor.toIntOrNull() ?: return "$campo debe ser numérico"
+        val texto = valor.trim()
+        val n = texto.toIntOrNull()
+        if (n == null) {
+            val soloDigitos = texto.removePrefix("-").let { d -> d.isNotEmpty() && d.all { c -> c.isDigit() } }
+            return if (soloDigitos) "$campo es demasiado grande" else "$campo debe ser numérico"
+        }
         return if (n < 0) "$campo no puede ser negativo" else null
+    }
+
+    /** Hora en formato 24 h (HH:mm). */
+    fun hora(valor: String): String? {
+        if (valor.isBlank()) return "La hora es obligatoria"
+        return if (!Regex("^([01]\\d|2[0-3]):[0-5]\\d$").matches(valor.trim()))
+            "Hora inválida (formato HH:mm, ej: 15:30)" else null
     }
 
     fun costoNoNegativo(valor: String): String? {
         if (valor.isBlank()) return "El costo es obligatorio (use 0 si no aplica)"
-        val n = valor.toDoubleOrNull() ?: return "El costo debe ser numérico"
+        val n = valor.trim().toDoubleOrNull() ?: return "El costo debe ser numérico"
         return if (n < 0) "El costo no puede ser negativo" else null
     }
 
