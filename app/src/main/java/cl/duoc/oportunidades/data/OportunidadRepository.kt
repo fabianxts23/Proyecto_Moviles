@@ -3,6 +3,11 @@ package cl.duoc.oportunidades.data
 import cl.duoc.oportunidades.data.local.*
 import cl.duoc.oportunidades.data.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+/** Evita que dos sincronizaciones simultáneas inserten la misma organización dos veces. */
+private val candadoSyncOrganizaciones = Mutex()
 
 /**
  * Repositorio: única puerta de acceso a los datos (capa MVVM).
@@ -47,6 +52,18 @@ class OportunidadRepository(private val db: AppDatabase) {
     fun organizaciones(): Flow<List<OrganizacionEntity>> = db.organizacionDao().observarTodas()
     fun organizacion(id: Long): Flow<OrganizacionEntity?> = db.organizacionDao().observarPorId(id)
     suspend fun crearOrganizacion(o: OrganizacionEntity): Long = db.organizacionDao().insertar(o)
+
+    /**
+     * Guarda en la base local las organizaciones del backend que la app aún no tiene.
+     * Retorna cuántas se agregaron.
+     */
+    suspend fun importarOrganizaciones(remotas: List<OrganizacionEntity>): Int =
+        candadoSyncOrganizaciones.withLock {
+            val dao = db.organizacionDao()
+            val nuevas = OrganizacionSync.nuevas(remotas, { it.nombre }, dao.nombres())
+            nuevas.forEach { dao.insertar(it) }
+            nuevas.size
+        }
 
     fun contactos(orgId: Long): Flow<List<ContactoEntity>> =
         db.contactoDao().observarPorOrganizacion(orgId)

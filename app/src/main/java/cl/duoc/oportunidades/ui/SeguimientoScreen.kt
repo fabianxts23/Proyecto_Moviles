@@ -14,6 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import cl.duoc.oportunidades.data.local.SeguimientoEntity
 import cl.duoc.oportunidades.data.model.*
+import cl.duoc.oportunidades.domain.validation.FormularioValidator
 import cl.duoc.oportunidades.domain.validation.Validators
 import cl.duoc.oportunidades.ui.theme.*
 import java.text.SimpleDateFormat
@@ -96,21 +97,17 @@ fun SeguimientoScreen(
                             "Fecha próximo seguimiento (yyyy-MM-dd)",
                             error = errores["fechaProxima"], obligatorio = true)
                         Button(onClick = {
-                            val e = mutableMapOf<String, String>()
-                            Validators.fechaValida(fechaAccion)?.let { e["fechaAccion"] = it }
-                            Validators.hora(horaAccion)?.let { e["horaAccion"] = it }
-                            Validators.requerido(resultado, "El resultado")?.let { e["resultado"] = it }
-                            Validators.requerido(proximaAccion, "La próxima acción")
-                                ?.let { e["proximaAccion"] = it }
-                            Validators.fechaValida(fechaProxima)?.let { e["fechaProxima"] = it }
-                            if (!e.containsKey("fechaAccion") && !e.containsKey("fechaProxima") &&
-                                AppViewModel.fechaALong(fechaProxima.trim()) <
-                                AppViewModel.fechaALong(fechaAccion.trim())) {
-                                e["fechaProxima"] =
-                                    "La próxima fecha no puede ser anterior a la fecha de la acción"
-                            }
+                            val e = FormularioValidator.seguimiento(mapOf(
+                                "fechaAccion" to fechaAccion, "horaAccion" to horaAccion,
+                                "resultado" to resultado, "proximaAccion" to proximaAccion,
+                                "fechaProxima" to fechaProxima))
                             errores = e
-                            if (e.isNotEmpty()) return@Button
+                            if (e.isNotEmpty()) {
+                                // Aviso visible arriba, además de los errores bajo cada campo
+                                vm.mostrarErrorPublico(
+                                    FormularioValidator.resumen(e) ?: "Revise los campos")
+                                return@Button
+                            }
 
                             val usuarioId = vm.session.usuarioActual?.id
                             if (usuarioId == null) {

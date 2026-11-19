@@ -44,8 +44,16 @@ object Validators {
 
     fun horario(valor: String): String? {
         if (valor.isBlank()) return "El horario es obligatorio"
-        val regex = Regex("^\\d{2}:\\d{2}\\s*[-–]\\s*\\d{2}:\\d{2}$")
-        return if (!regex.matches(valor.trim())) "Formato HH:mm - HH:mm (ej: 10:00 - 18:00)" else null
+        val regex = Regex("^(\\d{2}):(\\d{2})\\s*[-–]\\s*(\\d{2}):(\\d{2})$")
+        val m = regex.matchEntire(valor.trim())
+            ?: return "Formato HH:mm - HH:mm (ej: 10:00 - 18:00)"
+        val (h1, m1, h2, m2) = m.destructured
+        val horasValidas = h1.toInt() in 0..23 && h2.toInt() in 0..23 &&
+                m1.toInt() in 0..59 && m2.toInt() in 0..59
+        if (!horasValidas) return "Horario inválido: use horas entre 00:00 y 23:59"
+        val inicio = h1.toInt() * 60 + m1.toInt()
+        val fin = h2.toInt() * 60 + m2.toInt()
+        return if (fin <= inicio) "La hora de término debe ser posterior a la de inicio" else null
     }
 
     fun enteroNoNegativo(valor: String, campo: String): String? {
@@ -82,6 +90,28 @@ object Validators {
     fun potencial(valor: String): String? {
         val n = valor.toIntOrNull() ?: return "Debe ser un número del 1 al 5"
         return if (n !in 1..5) "El potencial debe estar entre 1 y 5" else null
+    }
+
+    /** Rechaza textos que superen el largo máximo (se ignoran los espacios de los extremos). */
+    fun longitudMaxima(valor: String?, max: Int, campo: String): String? =
+        if ((valor?.trim()?.length ?: 0) > max) "$campo no puede superar los $max caracteres" else null
+
+    /** Sitio web opcional: si se escribe, debe parecer una dirección web (ej: www.ejemplo.cl). */
+    fun sitioWebOpcional(valor: String?): String? {
+        if (valor.isNullOrBlank()) return null
+        val regex = Regex("^(https?://)?([A-Za-z0-9-]+\\.)+[A-Za-z]{2,}(/\\S*)?$")
+        return if (!regex.matches(valor.trim())) "Sitio web inválido (ej: www.ejemplo.cl)" else null
+    }
+
+    /** Número entero no negativo opcional: vacío es válido; si hay texto, se valida. */
+    fun enteroOpcional(valor: String?, campo: String): String? =
+        if (valor.isNullOrBlank()) null else enteroNoNegativo(valor, campo)
+
+    /** Evaluación opcional del 1 al 5 (vacío es válido). */
+    fun evaluacionOpcional(valor: String?): String? {
+        if (valor.isNullOrBlank()) return null
+        val n = valor.trim().toIntOrNull() ?: return "La evaluación debe ser un número del 1 al 5"
+        return if (n !in 1..5) "La evaluación debe estar entre 1 y 5" else null
     }
 
     /** Ejecuta todas las validaciones de un campo y retorna el primer error. */

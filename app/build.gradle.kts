@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kover)
 }
 
 android {
@@ -23,11 +24,11 @@ android {
         kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "21"
     }
 }
 
@@ -61,4 +62,25 @@ dependencies {
 
     // Vista previa de fotos
     implementation(libs.coil.compose)
+    testImplementation("junit:junit:4.13.2")
+}
+kover {
+    reports {
+        filters {
+            includes {
+                classes(
+                    "cl.duoc.oportunidades.domain.validation.Validators*",
+                    "cl.duoc.oportunidades.domain.validation.FormularioValidator*",
+                    "cl.duoc.oportunidades.data.model.ReglasEstado*",
+                    "cl.duoc.oportunidades.data.model.EstadoOportunidad*",
+                    "cl.duoc.oportunidades.data.UsuarioRepository*",
+                    "cl.duoc.oportunidades.data.UsuarioDto*",
+                    "cl.duoc.oportunidades.data.OrganizacionDto*",
+                    "cl.duoc.oportunidades.data.OrganizacionSync*",
+                    "cl.duoc.oportunidades.data.OrganizacionRemotaRepository*",
+                    "cl.duoc.oportunidades.data.local.Converters*"
+                )
+            }
+        }
+    }
 }

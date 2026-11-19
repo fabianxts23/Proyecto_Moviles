@@ -16,12 +16,17 @@ object RetrofitClient {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    val api: UsuariosApi by lazy {
+    private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(UsuariosApi::class.java)
+    }
+
+    val api: UsuariosApi by lazy { retrofit.create(UsuariosApi::class.java) }
+
+    val organizacionesApi: OrganizacionesApi by lazy {
+        retrofit.create(OrganizacionesApi::class.java)
     }
 }

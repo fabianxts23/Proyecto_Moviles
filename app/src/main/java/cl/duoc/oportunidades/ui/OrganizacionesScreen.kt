@@ -16,6 +16,7 @@ import androidx.navigation.NavHostController
 import cl.duoc.oportunidades.data.local.ContactoEntity
 import cl.duoc.oportunidades.data.local.OrganizacionEntity
 import cl.duoc.oportunidades.data.model.*
+import cl.duoc.oportunidades.domain.validation.FormularioValidator
 import cl.duoc.oportunidades.ui.theme.*
 
 /** Medios de contacto preferentes que se pueden elegir al registrar un contacto. */
@@ -32,6 +33,9 @@ fun OrganizacionesScreen(nav: NavHostController, vm: AppViewModel = viewModel())
     var orgExpandida by remember { mutableStateOf<Long?>(null) }
 
     AutoLimpiarBanner(guardado.exito, guardado.error) { vm.limpiarGuardado() }
+
+    // Al abrir la pantalla se traen las organizaciones nuevas del backend
+    LaunchedEffect(Unit) { vm.sincronizarOrganizaciones() }
 
     Scaffold(
         topBar = {
@@ -158,7 +162,7 @@ fun DialogoOrganizacion(
     var publico by remember { mutableStateOf("") }
     var observaciones by remember { mutableStateOf("") }
     var tipo by remember { mutableStateOf(TipoOrganizacion.INSTITUCION_PRIVADA) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var errores by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     AlertDialog(
         onDismissRequest = alCancelar,
@@ -166,23 +170,32 @@ fun DialogoOrganizacion(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                CampoTexto(nombre, { nombre = it }, "Nombre", obligatorio = true)
-                CampoTexto(rubro, { rubro = it }, "Rubro", obligatorio = true)
-                CampoTexto(comuna, { comuna = it }, "Comuna", obligatorio = true)
-                CampoTexto(region, { region = it }, "Región", obligatorio = true)
-                CampoTexto(sitioWeb, { sitioWeb = it }, "Sitio web ficticio")
-                CampoTexto(publico, { publico = it }, "Público asociado")
-                CampoTexto(observaciones, { observaciones = it }, "Observaciones")
+                CampoTexto(nombre, { nombre = it }, "Nombre",
+                    error = errores["nombre"], obligatorio = true)
+                CampoTexto(rubro, { rubro = it }, "Rubro",
+                    error = errores["rubro"], obligatorio = true)
+                CampoTexto(comuna, { comuna = it }, "Comuna",
+                    error = errores["comuna"], obligatorio = true)
+                CampoTexto(region, { region = it }, "Región",
+                    error = errores["region"], obligatorio = true)
+                CampoTexto(sitioWeb, { sitioWeb = it }, "Sitio web ficticio",
+                    error = errores["sitioWeb"], placeholder = "www.ejemplo.cl")
+                CampoTexto(publico, { publico = it }, "Público asociado",
+                    error = errores["publico"])
+                CampoTexto(observaciones, { observaciones = it }, "Observaciones",
+                    error = errores["observaciones"])
                 SelectorOpciones("Tipo de organización", TipoOrganizacion.values().toList(),
                     tipo, { it.etiqueta }, { tipo = it })
-                error?.let { Text(it, color = ErrorColor) }
+                FormularioValidator.resumen(errores)?.let { Text(it, color = ErrorColor) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (nombre.isBlank() || rubro.isBlank() || comuna.isBlank() || region.isBlank()) {
-                    error = "Nombre, rubro, comuna y región son obligatorios"
-                } else {
+                errores = FormularioValidator.organizacion(mapOf(
+                    "nombre" to nombre, "rubro" to rubro, "comuna" to comuna,
+                    "region" to region, "sitioWeb" to sitioWeb, "publico" to publico,
+                    "observaciones" to observaciones))
+                if (errores.isEmpty()) {
                     alGuardar(OrganizacionEntity(nombre = nombre.trim(), tipo = tipo,
                         rubro = rubro.trim(), comuna = comuna.trim(), region = region.trim(),
                         sitioWeb = sitioWeb.trim(), publicoAsociado = publico.trim(),

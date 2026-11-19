@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import cl.duoc.oportunidades.domain.validation.FormularioValidator
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -255,7 +256,7 @@ fun DialogoResultado(alGuardar: (Map<String, String>) -> Unit, alCancelar: () ->
     var evaluacion by remember { mutableStateOf("") }
     var observaciones by remember { mutableStateOf("") }
     var aprendizajes by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var errores by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     AlertDialog(
         onDismissRequest = alCancelar,
@@ -264,32 +265,32 @@ fun DialogoResultado(alGuardar: (Map<String, String>) -> Unit, alCancelar: () ->
             Column(Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 CampoTexto(asistentes, { asistentes = it.filter { c -> c.isDigit() } },
-                    "Asistentes (estimado)", obligatorio = true)
+                    "Asistentes (estimado)", error = errores["asistentes"], obligatorio = true)
                 CampoTexto(contactos, { contactos = it.filter { c -> c.isDigit() } },
-                    "Contactos generados", obligatorio = true)
+                    "Contactos generados", error = errores["contactos"], obligatorio = true)
                 CampoTexto(interesados, { interesados = it.filter { c -> c.isDigit() } },
-                    "Personas interesadas")
+                    "Personas interesadas", error = errores["interesados"])
                 CampoTexto(inscripciones, { inscripciones = it.filter { c -> c.isDigit() } },
-                    "Inscripciones")
+                    "Inscripciones", error = errores["inscripciones"])
                 CampoTexto(evaluacion, { evaluacion = it.filter { c -> c.isDigit() } },
-                    "Evaluación general (1-5)")
-                CampoTexto(observaciones, { observaciones = it }, "Observaciones del equipo")
-                CampoTexto(aprendizajes, { aprendizajes = it }, "Aprendizajes")
-                error?.let { Text(it, color = ErrorColor) }
+                    "Evaluación general (1-5)", error = errores["evaluacion"])
+                CampoTexto(observaciones, { observaciones = it }, "Observaciones del equipo",
+                    error = errores["observaciones"])
+                CampoTexto(aprendizajes, { aprendizajes = it }, "Aprendizajes",
+                    error = errores["aprendizajes"])
+                FormularioValidator.resumen(errores)?.let { Text(it, color = ErrorColor) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (asistentes.isBlank() || contactos.isBlank()) {
-                    error = "Asistentes y contactos generados son obligatorios"
-                } else {
-                    alGuardar(mapOf(
-                        "asistentes" to asistentes, "contactos" to contactos,
-                        "interesados" to interesados, "inscripciones" to inscripciones,
-                        "evaluacion" to evaluacion, "observaciones" to observaciones,
-                        "aprendizajes" to aprendizajes
-                    ))
-                }
+                val datos = mapOf(
+                    "asistentes" to asistentes, "contactos" to contactos,
+                    "interesados" to interesados, "inscripciones" to inscripciones,
+                    "evaluacion" to evaluacion, "observaciones" to observaciones,
+                    "aprendizajes" to aprendizajes
+                )
+                errores = FormularioValidator.resultado(datos)
+                if (errores.isEmpty()) alGuardar(datos)
             }) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = alCancelar) { Text("Cancelar") } }

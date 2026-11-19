@@ -4,10 +4,13 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import cl.duoc.oportunidades.data.OportunidadRepository
+import cl.duoc.oportunidades.data.OrganizacionDto
+import cl.duoc.oportunidades.data.OrganizacionRemotaRepository
 import cl.duoc.oportunidades.data.ResultadoOp
 import cl.duoc.oportunidades.data.SessionManager
 import cl.duoc.oportunidades.data.local.*
 import cl.duoc.oportunidades.data.model.*
+import cl.duoc.oportunidades.domain.validation.FormularioValidator
 import cl.duoc.oportunidades.domain.validation.Validators
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -128,10 +131,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (organizacionId == null) errores["organizacion"] = "Seleccione la organización responsable"
         if (errores.isNotEmpty() || tipo == null || fuente == null || organizacionId == null) {
             // Se mantienen los valores ingresados (viven en la pantalla)
-            val n = errores.size
             _guardado.value = GuardadoUi(
-                error = if (n == 1) "Revise el campo marcado en rojo"
-                        else "Revise los $n campos marcados en rojo",
+                error = FormularioValidator.resumen(errores) ?: "Revise los campos marcados en rojo",
                 errores = errores)
             return
         }
@@ -190,54 +191,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Validación de todo el formulario (reglas de negocio incluidas). */
-    fun validarFormulario(c: Map<String, String>, fechaDeteccion: Long): Map<String, String> {
-        val e = mutableMapOf<String, String>()
-        Validators.requerido(c["nombre"], "El nombre")?.let { e["nombre"] = it }
-        Validators.requerido(c["descripcion"], "La descripción")?.let { e["descripcion"] = it }
-        Validators.requerido(c["eventoNombre"], "El nombre del evento")?.let { e["eventoNombre"] = it }
-        Validators.requerido(c["eventoTipo"], "El tipo de evento")?.let { e["eventoTipo"] = it }
-        Validators.fechaValida(c["fechaInicio"] ?: "")?.let { e["fechaInicio"] = it }
-        Validators.fechaValida(c["fechaTermino"] ?: "")?.let { e["fechaTermino"] = it }
-        Validators.horario(c["horario"] ?: "")?.let { e["horario"] = it }
-        Validators.requerido(c["direccion"], "La dirección")?.let { e["direccion"] = it }
-        Validators.requerido(c["comuna"], "La comuna")?.let { e["comuna"] = it }
-        Validators.requerido(c["region"], "La región")?.let { e["region"] = it }
-        Validators.requerido(c["publicoEsperado"], "El perfil del público esperado")?.let { e["publicoEsperado"] = it }
-        Validators.requerido(c["publicoObjetivo"], "El público objetivo")?.let { e["publicoObjetivo"] = it }
-        Validators.enteroNoNegativo(c["asistentes"] ?: "", "El público esperado")?.let { e["asistentes"] = it }
-        Validators.requerido(c["condiciones"], "Las condiciones")?.let { e["condiciones"] = it }
-        Validators.requerido(c["requisitos"], "Los requisitos")?.let { e["requisitos"] = it }
-        Validators.costoNoNegativo(c["costos"] ?: "")?.let { e["costos"] = it }
-        Validators.requerido(c["espacios"], "Los espacios")?.let { e["espacios"] = it }
-        Validators.potencial(c["potencial"] ?: "")?.let { e["potencial"] = it }
-        // Reglas de negocio: coherencia de fechas
-        //  - el término no puede ser anterior al inicio
-        //  - el inicio no puede ser anterior a la fecha de detección
-        if (!e.containsKey("fechaInicio") && c["fechaInicio"] != null) {
-            val inicio = fechaALong(c["fechaInicio"]!!.trim())
-            if (inicio < inicioDelDia(fechaDeteccion)) {
-                e["fechaInicio"] = "El evento no puede iniciar antes de ser detectado (" +
-                        longAFecha(fechaDeteccion) + ")"
-            }
-        }
-        if (!e.containsKey("fechaInicio") && !e.containsKey("fechaTermino") &&
-            c["fechaInicio"] != null && c["fechaTermino"] != null) {
-            if (fechaALong(c["fechaTermino"]!!.trim()) < fechaALong(c["fechaInicio"]!!.trim())) {
-                e["fechaTermino"] = "La fecha de término no puede ser anterior al inicio"
-            }
-        }
-        return e
-    }
+    fun validarFormulario(c: Map<String, String>, fechaDeteccion: Long): Map<String, String> =
+        FormularioValidator.oportunidad(c, fechaDeteccion)
 
     // ---------- Validación de contacto (formulario de organizaciones) ----------
-    fun validarContacto(c: Map<String, String>): Map<String, String> {
-        val e = mutableMapOf<String, String>()
-        Validators.requerido(c["nombre"], "El nombre")?.let { e["nombre"] = it }
-        Validators.requerido(c["cargo"], "El cargo")?.let { e["cargo"] = it }
-        Validators.email(c["correo"] ?: "")?.let { e["correo"] = it }
-        Validators.telefono(c["telefono"] ?: "")?.let { e["telefono"] = it }
-        return e
-    }
+    fun validarContacto(c: Map<String, String>): Map<String, String> =
+        FormularioValidator.contacto(c)
 
     fun guardarContacto(c: ContactoEntity, esNuevo: Boolean) {
         _guardado.value = GuardadoUi(guardando = true)
@@ -251,14 +210,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val organizacionesRemotas = OrganizacionRemotaRepository()
+
     fun guardarOrganizacion(o: OrganizacionEntity) {
         _guardado.value = GuardadoUi(guardando = true)
         viewModelScope.launch {
             try {
                 repo.crearOrganizacion(o)
-                _guardado.value = GuardadoUi(exito = "Organización guardada correctamente")
             } catch (e: Exception) {
                 _guardado.value = GuardadoUi(error = "No se pudo guardar la organización")
+                return@launch
+            }
+            // Se intenta enviar también al backend; si no hay conexión queda solo en el celular
+            val enviada = organizacionesRemotas.enviar(OrganizacionDto.desde(o))
+            _guardado.value = GuardadoUi(exito = if (enviada)
+                "Organización guardada correctamente"
+            else "Organización guardada solo en el celular (sin conexión con el servidor)")
+        }
+    }
+
+    /**
+     * Trae las organizaciones del backend (por ejemplo, las creadas desde Swagger) y agrega
+     * a la app las que falten. Si el servidor no responde, no cambia nada.
+     */
+    fun sincronizarOrganizaciones() {
+        viewModelScope.launch {
+            val remotas = organizacionesRemotas.descargar() ?: return@launch
+            try {
+                repo.importarOrganizaciones(remotas.map { it.aEntidadLocal() })
+            } catch (e: Exception) {
+                // La lista local sigue funcionando aunque falle la sincronización
             }
         }
     }

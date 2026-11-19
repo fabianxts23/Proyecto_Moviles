@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import cl.duoc.oportunidades.domain.validation.FormularioValidator
 import cl.duoc.oportunidades.ui.navigation.Rutas
 import cl.duoc.oportunidades.ui.theme.*
 
@@ -24,6 +25,7 @@ fun LoginScreen(nav: NavHostController, vm: AuthViewModel = viewModel()) {
 
     var correo by remember { mutableStateOf("") }
     var clave by remember { mutableStateOf("") }
+    var errores by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     // Navegar al dashboard cuando la autenticación es exitosa
     LaunchedEffect(ui.autenticado) {
@@ -64,11 +66,17 @@ fun LoginScreen(nav: NavHostController, vm: AuthViewModel = viewModel()) {
             style = MaterialTheme.typography.bodyMedium, color = TextoSecundario)
 
         Spacer(Modifier.height(28.dp))
-        CampoTexto(correo, { correo = it; vm.limpiarError() }, "Correo",
-            obligatorio = true, placeholder = "ejecutivo1@ficticio.cl")
+        CampoTexto(correo, { correo = it; errores = errores - "correo"; vm.limpiarError() }, "Correo",
+            error = errores["correo"], obligatorio = true, placeholder = "ejecutivo1@ficticio.cl")
         Spacer(Modifier.height(10.dp))
-        CampoTexto(clave, { clave = it; vm.limpiarError() }, "Contraseña",
-            obligatorio = true, esClave = true, placeholder = "duoc123")
+        CampoTexto(clave, { clave = it; errores = errores - "clave"; vm.limpiarError() }, "Contraseña",
+            error = errores["clave"], obligatorio = true, esClave = true, placeholder = "duoc123")
+
+        // Aviso cuando falta o es inválido algún dato
+        FormularioValidator.resumen(errores)?.let { aviso ->
+            Spacer(Modifier.height(8.dp))
+            Text(aviso, color = ErrorColor, style = MaterialTheme.typography.bodyMedium)
+        }
 
         if (ui.error != null) {
             Spacer(Modifier.height(8.dp))
@@ -77,7 +85,10 @@ fun LoginScreen(nav: NavHostController, vm: AuthViewModel = viewModel()) {
 
         Spacer(Modifier.height(20.dp))
         Button(
-            onClick = { vm.login(correo, clave) },
+            onClick = {
+                errores = FormularioValidator.login(correo, clave)
+                if (errores.isEmpty()) vm.login(correo.trim(), clave)
+            },
             enabled = !ui.cargando,
             modifier = Modifier.fillMaxWidth()
         ) {

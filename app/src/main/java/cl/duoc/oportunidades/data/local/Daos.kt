@@ -40,6 +40,10 @@ interface OrganizacionDao {
     @Query("SELECT * FROM organizaciones WHERE id = :id")
     fun observarPorId(id: Long): Flow<OrganizacionEntity?>
 
+    /** Nombres ya guardados, para no duplicar al sincronizar con el backend. */
+    @Query("SELECT nombre FROM organizaciones")
+    suspend fun nombres(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertar(org: OrganizacionEntity): Long
 }
